@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.14.36414.22
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "httpfromtcp", "httpfromtcp\httpfromtcp.csproj", "{9C10240A-074C-4DF0-BA26-86C6FAC71DE9}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "mockclient", "mockclient\mockclient.csproj", "{B410C146-DB96-B281-7E4B-B8D8A275AD80}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{9C10240A-074C-4DF0-BA26-86C6FAC71DE9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9C10240A-074C-4DF0-BA26-86C6FAC71DE9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9C10240A-074C-4DF0-BA26-86C6FAC71DE9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9C10240A-074C-4DF0-BA26-86C6FAC71DE9}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B410C146-DB96-B281-7E4B-B8D8A275AD80}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B410C146-DB96-B281-7E4B-B8D8A275AD80}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B410C146-DB96-B281-7E4B-B8D8A275AD80}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B410C146-DB96-B281-7E4B-B8D8A275AD80}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {71D96A96-8AAA-41D8-914C-091061778AC7}
+	EndGlobalSection
+EndGlobal
