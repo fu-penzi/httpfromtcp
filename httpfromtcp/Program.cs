@@ -1,55 +1,37 @@
-﻿using System.Net;
+﻿using httpfromtcp;
+using System.Net;
 using System.Net.Sockets;
-using System.Text;
 
-TcpListener listener = new(IPAddress.Parse("127.0.0.1"), 42069);
+IPEndPoint ipEndPoint = new(IPAddress.Parse("127.0.0.1"), 42069);
+TcpListener listener = new(ipEndPoint);
 
 try
 {
     listener.Start();
-    using TcpClient handler = listener.AcceptTcpClient();
-    await using NetworkStream stream = handler.GetStream();
-
-    foreach (var line in GetLines(stream))
-    {
-        Console.WriteLine($"READ: {line}");
-    }
-}
-catch
-{
-    listener.Stop();
-    throw;
-}
+    Console.WriteLine($"Listening on: {ipEndPoint}");
 
 
-IEnumerable<string> GetLines(Stream steam)
-{
-    var currenLine = new StringBuilder();
+    TcpClient handler = listener.AcceptTcpClient();
+    NetworkStream stream = handler.GetStream();
+
     while (true)
     {
-        byte[] buff = new byte[8];
-        int read = steam.Read(buff);
-        if (read == 0)
+        try
         {
-            if (currenLine.Length != 0)
+            foreach (var line in HttpServer.GetLines(stream))
             {
-                yield return currenLine.ToString();
-            }
-            break;
-        }
-
-        string str = Encoding.Default.GetString(buff[..read]);
-        string[] lines = str.Split("\n");
-        if (lines.Length > 1)
-        {
-            Console.WriteLine($"READ: {currenLine}{lines[0]}");
-            currenLine.Clear();
-
-            foreach (var line in lines[1..^1])
-            {
-                yield return line;
+                Console.WriteLine($"READ: {line}");
             }
         }
-        currenLine.Append(lines[^1]);
+        catch (IOException e)
+        {
+            Console.WriteLine($"(Connection terminated): {e.Message}");
+            handler = listener.AcceptTcpClient();
+            stream = handler.GetStream();
+        }
     }
+}
+finally
+{
+    listener.Stop();
 }
