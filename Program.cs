@@ -1,38 +1,55 @@
-﻿using System.Text;
+﻿using System.Net;
+using System.Net.Sockets;
+using System.Text;
 
-string path = "C:\\PROJEKTY\\httpfromtcp\\httpfromtcp\\messages.txt";
+TcpListener listener = new(IPAddress.Parse("127.0.0.1"), 42069);
 
 try
 {
-    var currenLine = new StringBuilder();
-    using (FileStream fs = File.OpenRead(path))
-    {
-        byte[] buff = new byte[8];
+    listener.Start();
+    using TcpClient handler = listener.AcceptTcpClient();
+    await using NetworkStream stream = handler.GetStream();
 
-        for (int read = 0; (read = fs.Read(buff)) > 0;)
-        {
-            string str = Encoding.Default.GetString(buff[..read]);
-            string[] lines = str.Split("\n");
-            if (lines.Length > 1)
-            {
-                Console.WriteLine($"READ: {currenLine}{lines[0]}");
-                currenLine.Clear();
-                foreach (var line in lines[1..^1])
-                {
-                    Console.WriteLine($"READ: {line}");
-                }
-            }
-            currenLine.Append(lines[^1]);
-        }
-    }
-
-    if (currenLine.Length != 0)
+    foreach (var line in GetLines(stream))
     {
-        Console.WriteLine($"READ: {currenLine}");
+        Console.WriteLine($"READ: {line}");
     }
 }
-catch (IOException e)
+catch
 {
-    Console.WriteLine($"Err: {e.Message}\n");
-    return;
+    listener.Stop();
+    throw;
+}
+
+
+IEnumerable<string> GetLines(Stream steam)
+{
+    var currenLine = new StringBuilder();
+    while (true)
+    {
+        byte[] buff = new byte[8];
+        int read = steam.Read(buff);
+        if (read == 0)
+        {
+            if (currenLine.Length != 0)
+            {
+                yield return currenLine.ToString();
+            }
+            break;
+        }
+
+        string str = Encoding.Default.GetString(buff[..read]);
+        string[] lines = str.Split("\n");
+        if (lines.Length > 1)
+        {
+            Console.WriteLine($"READ: {currenLine}{lines[0]}");
+            currenLine.Clear();
+
+            foreach (var line in lines[1..^1])
+            {
+                yield return line;
+            }
+        }
+        currenLine.Append(lines[^1]);
+    }
 }
