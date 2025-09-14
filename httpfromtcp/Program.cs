@@ -14,21 +14,18 @@ try
     TcpClient handler = listener.AcceptTcpClient();
     NetworkStream stream = handler.GetStream();
 
-    while (true)
+    HttpServer httpServer = new();
+
+    try
     {
-        try
-        {
-            foreach (var line in HttpServer.GetLines(stream))
-            {
-                Console.WriteLine($"READ: {line}");
-            }
-        }
-        catch (IOException e)
-        {
-            Console.WriteLine($"(Connection terminated): {e.Message}");
-            handler = listener.AcceptTcpClient();
-            stream = handler.GetStream();
-        }
+        Request r = httpServer.RequestFromReader(stream);
+        Console.WriteLine($"READ: {r.RequestLine}");
+    }
+    catch (IOException e)
+    {
+        Console.WriteLine($"(Connection terminated): {e.Message}");
+        handler = listener.AcceptTcpClient();
+        stream = handler.GetStream();
     }
 }
 finally
