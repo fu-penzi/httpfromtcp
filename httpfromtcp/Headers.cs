@@ -1,10 +1,25 @@
 ﻿using System.Text;
+using System.Text.RegularExpressions;
 
 namespace httpfromtcp;
 
-public class Headers
+public partial class Headers
 {
-    public Dictionary<string, string> Data { get; } = [];
+    private readonly Dictionary<string, string> _data = [];
+
+
+    // A field-name must contain only:
+    // Uppercase letters: A-Z
+    // Lowercase letters: a-z
+    // Digits: 0-9
+    // Special characters: !, #, $, %, &, ', *, +, -, ., ^, _, `, |, ~
+    [GeneratedRegex(@"^[A-Za-z0-9!#$%&'*+\-.^_`|~]+$")]
+    private static partial Regex HeaderNameRegex();
+
+    public string Get(string key)
+    {
+        return _data[key.ToLower()];
+    }
 
     public (int read, bool done) Parse(Span<byte> data)
     {
@@ -19,7 +34,6 @@ public class Headers
         }
 
         int read = retIdx + separator.Length;
-
         string header = Encoding.UTF8.GetString(data[..retIdx]);
         if (char.IsWhiteSpace(header[0]) || char.IsWhiteSpace(header[^1]))
         {
@@ -33,7 +47,7 @@ public class Headers
             throw new IncorrectFormatException($"Incorrect header format {header}");
         }
 
-        string name = parts[0].Trim();
+        string name = parts[0].Trim().ToLower();
         string value = parts[1].Trim();
         if (name.Length == 0 || value.Length == 0)
         {
@@ -53,10 +67,16 @@ public class Headers
                 $"Incorrect header format {header}. No space after ':'.");
         }
 
-        if (!Data.TryAdd(name, value))
+
+        if (!HeaderNameRegex().IsMatch(name))
         {
             throw new IncorrectFormatException(
-                $"Incorrect header format {header}. Duplicated header {name}.");
+                $"Incorrect header format {header}. Invalid characters in header name.");
+        }
+
+        if (!_data.TryAdd(name, value))
+        {
+            _data[name] += $", {value}";
         }
 
         return (read, false);
