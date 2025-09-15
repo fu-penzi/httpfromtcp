@@ -1,12 +1,18 @@
 ﻿using System.Text;
 using System.Text.RegularExpressions;
 
-namespace httpfromtcp;
+namespace httpfromtcp.Parsing;
 
+/// <summary>
+/// Headers:<br/><br/>
+/// <b>*( field-line CRLF )<br/>
+/// CRLF<br/></b>
+/// <br/>
+/// <i>field-line   = field-name ":" OWS field-value OWS</i>
+/// </summary>
 public partial class Headers
 {
     private readonly Dictionary<string, string> _data = [];
-
 
     // A field-name must contain only:
     // Uppercase letters: A-Z
@@ -21,6 +27,34 @@ public partial class Headers
         return _data[key.ToLower()];
     }
 
+    public bool TryGetValue(string key, out string? value)
+    {
+        return _data.TryGetValue(key.ToLower(), out value);
+    }
+
+    public IReadOnlyDictionary<string, string> Data()
+    {
+        return _data.AsReadOnly();
+    }
+
+    public override string ToString()
+    {
+        var builder = new StringBuilder();
+        foreach (KeyValuePair<string, string> kvp in _data)
+        {
+            builder.Append($"- {kvp.Key}: {kvp.Value}\n");
+        }
+
+        return builder.ToString();
+    }
+
+    /// <summary>
+    /// Parse headers part of request<br/>
+    /// </summary>
+    /// <param name="data">Text data to parse.</param>
+    /// <returns><b>read</b> - Number of bytes parsed. 0 if needs more data.<br/>
+    /// <b>done</b> - True if all headers parsed.</returns>
+    /// <exception cref="IncorrectFormatException"></exception>
     public (int read, bool done) Parse(Span<byte> data)
     {
         byte[] separator = Encoding.UTF8.GetBytes(Constants.Separator);
@@ -29,18 +63,14 @@ public partial class Headers
         {
             case -1:
                 return (0, false);
+            // CRLF marks end of Headers lines
             case 0:
                 return (separator.Length, true);
         }
 
         int read = retIdx + separator.Length;
-        string header = Encoding.UTF8.GetString(data[..retIdx]);
-        if (char.IsWhiteSpace(header[0]) || char.IsWhiteSpace(header[^1]))
-        {
-            throw new IncorrectFormatException(
-                $"Incorrect header format {header}. Unnecessary trailing or leading whitespace.");
-        }
-
+        // Trim OWS
+        string header = Encoding.UTF8.GetString(data[..retIdx]).Trim();
         string[] parts = header.Split(':', 2);
         if (parts.Length < 2)
         {
@@ -55,18 +85,12 @@ public partial class Headers
                 $"Incorrect header format {header}. Empty header name of value.");
         }
 
+        // Forbidden whitespace before colon
         if (name.Length != parts[0].Length)
         {
             throw new IncorrectFormatException(
                 $"Incorrect header format {header}. Unnecessary whitespace before ':'.");
         }
-
-        if (value.Length == parts[1].Length)
-        {
-            throw new IncorrectFormatException(
-                $"Incorrect header format {header}. No space after ':'.");
-        }
-
 
         if (!HeaderNameRegex().IsMatch(name))
         {

@@ -1,5 +1,5 @@
-﻿using System.Net;
-using System.Text;
+﻿using System.Text;
+using httpfromtcp.Parsing;
 
 namespace httpfromtcp.Tests;
 
@@ -7,16 +7,17 @@ namespace httpfromtcp.Tests;
 public sealed class HeadersTest
 {
     // Good: Valid single header
-    [DataRow("Host: localhost:42069\r\n\r\n")]
+    [DataRow("Host: localhost:42069\r\n\r\n", 23)]
+    [DataRow("          Host: localhost:42069              \r\n\r\n", 47)]
     [TestMethod]
-    public void SingleHeader(string data)
+    public void SingleHeader(string data, int expectedParsed)
     {
         Headers headers = new();
 
         var (parsed, done) = headers.Parse(Encoding.UTF8.GetBytes(data));
 
         Assert.AreEqual("localhost:42069", headers.Get("Host"));
-        Assert.AreEqual(23, parsed);
+        Assert.AreEqual(expectedParsed, parsed);
         Assert.IsFalse(done);
     }
 
@@ -102,9 +103,8 @@ public sealed class HeadersTest
     }
 
     // Bad: Invalid spacing
-    [DataRow("Host:localhost:42069\r\n\r\n")]
     [DataRow("Host : localhost:42069\r\n\r\n")]
-    [DataRow(" Host: localhost:42069 \r\n\r\n")]
+    [DataRow(" Host\t: localhost:42069 \r\n\r\n")]
     [DataRow("            Host : localhost:42069           \r\n\r\n")]
     [TestMethod]
     public void BadSpacing(string data)
@@ -112,23 +112,8 @@ public sealed class HeadersTest
         TestForException((() => new Headers().Parse(Encoding.UTF8.GetBytes(data))));
     }
 
-    // // Bad: Invalid header separators
-    // [DataRow("\n")]
-    // [TestMethod]
-    // public void InvalidHeaderSeparators(string separator)
-    // {
-    //     const string header1 = "Host: localhost:42069";
-    //     const string header2 = "User-Agent: curl/7.81.0";
-    //     TestForException((() =>
-    //     {
-    //         Headers headers = new();
-    //         headers.Parse(Encoding.UTF8.GetBytes($"{header1}{separator}{header2}{separator}"));
-    //         headers.Parse(Encoding.UTF8.GetBytes($"{header2}{separator}"));
-    //     }));
-    // }
-
     // Bad: Missing header name
-    [DataRow("localhost:42069\r\n\r\n")]
+    [DataRow(":localhost:42069\r\n\r\n")]
     [DataRow(": localhost:42069\r\n\r\n")]
     [DataRow(" : localhost:42069\r\n\r\n")]
     [DataRow(" :localhost:42069\r\n\r\n")]
