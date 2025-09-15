@@ -14,11 +14,9 @@ try
     TcpClient handler = listener.AcceptTcpClient();
     NetworkStream stream = handler.GetStream();
 
-    HttpServer httpServer = new();
-
     try
     {
-        Request r = httpServer.RequestFromReader(stream);
+        Request r = Request.FromStream(stream);
         Console.WriteLine($"READ: {r.RequestLine}");
     }
     catch (IOException e)
