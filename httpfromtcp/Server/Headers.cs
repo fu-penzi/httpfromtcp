@@ -1,7 +1,7 @@
 ﻿using System.Text;
 using System.Text.RegularExpressions;
 
-namespace httpfromtcp.Parsing;
+namespace httpfromtcp.Server;
 
 /// <summary>
 /// Headers:<br/><br/>

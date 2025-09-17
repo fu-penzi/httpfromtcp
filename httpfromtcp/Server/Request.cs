@@ -1,16 +1,6 @@
-﻿using System.Net.Sockets;
-using System.Text;
+﻿using System.Text;
 
-namespace httpfromtcp.Parsing;
-
-internal enum ParsingState
-{
-    Initialized,
-    ParsingHeaders,
-    ParsingBody,
-    Error,
-    Done
-}
+namespace httpfromtcp.Server;
 
 /// <summary>
 /// RequestLine<br/>
@@ -19,9 +9,9 @@ internal enum ParsingState
 /// <i>request-line  = method SP request-target SP HTTP-version</i>
 /// </summary>
 public record RequestLine(
-    string Method = "",
+    string Method        = "",
     string RequestTarget = "",
-    string HttpVersion = ""
+    string HttpVersion   = ""
 );
 
 /// <summary>
@@ -35,26 +25,37 @@ public record RequestLine(
 public class Request
 {
     public RequestLine RequestLine { get; private set; } = new();
-    public Headers Headers { get; } = new();
-    public List<byte> Body { get; } = [];
-    public Exception? Error { get; private set; }
+    public Headers     Headers     { get; }              = new();
+    public List<byte>  Body        { get; }              = [];
+    public Exception?  Error       { get; private set; }
 
+    private enum ParsingState
+    {
+        Initialized,
+        ParsingHeaders,
+        ParsingBody,
+        Error,
+        Done
+    }
+
+    private bool         Done => _state is ParsingState.Done or ParsingState.Error;
     private ParsingState _state = ParsingState.Initialized;
-    private bool Done => _state is ParsingState.Done or ParsingState.Error;
+
 
     /// <summary>
     /// Loop over stream of data until whole request is parsed.
     /// </summary>
     /// <param name="stream">Stream to read from.</param>
-    /// <param name="length">Max length of parsing buffer.</param>
+    /// <param name="initialBuff">Initial length of parsing buffer.</param>
     /// <returns>Parsed request</returns>
-    public static Request FromStream(IReader stream, int length = 1024)
+    public static Request FromStream(Stream stream, int initialBuff = 1024)
     {
+        Reader reader = new(stream);
         Request request = new();
         try
         {
             int buffLen = 0;
-            byte[] buff = new byte[length];
+            byte[] buff = new byte[initialBuff];
             while (!request.Done)
             {
                 if (buffLen == buff.Length)
@@ -64,7 +65,7 @@ public class Request
                     buff = newBuff;
                 }
 
-                int readBytes = stream.DataAvailable
+                int readBytes = reader.DataAvailable
                     ? stream.Read(buff, buffLen, buff.Length - buffLen)
                     : 0;
 
@@ -76,10 +77,11 @@ public class Request
                     buffLen -= parsedBytes;
                     Array.Copy(buff, parsedBytes, buff, 0, buffLen); // Remove parsed elements from buffer
                 }
-                else if (!request.Done && readBytes == 0) // terminate if not reading and parsing anything
-                {
-                    throw new ArgumentException($"Unexpected end of stream for: {request.RequestLine}");
-                }
+                // TODO handle this
+                // else if (!request.Done && readBytes == 0) // terminate if not reading and parsing anything
+                // {
+                //     throw new ArgumentException($"Unexpected end of stream for: {request.RequestLine}");
+                // }
             }
         }
         catch (Exception e)

@@ -1,14 +1,8 @@
 ﻿using System.Net.Sockets;
 
-namespace httpfromtcp.Parsing;
+namespace httpfromtcp.Server;
 
-public interface IReader
-{
-    int Read(byte[] buffer, int offset, int count);
-    bool DataAvailable { get; }
-}
-
-public class Reader(Stream stream) : IReader
+internal class Reader(Stream stream)
 {
     public int Read(byte[] buffer, int offset, int count)
     {
