@@ -1,4 +1,5 @@
-﻿using System.Text;
+﻿using System.Net.Sockets;
+using System.Text;
 using httpfromtcp.Parsing;
 
 namespace httpfromtcp.Tests;
@@ -24,14 +25,10 @@ public sealed class RequestTest
     [TestClass]
     public class RequestLine
     {
-        // Good: GET Request line
-        [DataRow("GET", "/", "1.1", "GET / HTTP/1.1\r\n")]
-        // Good: POST Request line
-        [DataRow("POST", "/", "1.1", "POST / HTTP/1.1\r\n")]
-        // Good: GET Request line with path
-        [DataRow("GET", "/coffee", "1.1", "GET /coffee HTTP/1.1\r\n")]
-        // Good: POST Request line with path
-        [DataRow("POST", "/coffee", "1.1", "POST /coffee HTTP/1.1\r\n")]
+        [DataRow("GET", "/", "1.1", "GET / HTTP/1.1\r\n")]               // Good: GET Request line
+        [DataRow("POST", "/", "1.1", "POST / HTTP/1.1\r\n")]             // Good: POST Request line
+        [DataRow("GET", "/coffee", "1.1", "GET /coffee HTTP/1.1\r\n")]   // Good: GET Request line with path
+        [DataRow("POST", "/coffee", "1.1", "POST /coffee HTTP/1.1\r\n")] // Good: POST Request line with path
         [TestMethod]
         public void Good(string method, string target, string httpVersion, string request)
         {
@@ -46,16 +43,16 @@ public sealed class RequestTest
             Assert.AreEqual("*/*", r.Headers.Get("Accept"));
         }
 
-        //BAD: Invalid request line parts
-        [DataRow($"/coffee HTTP/1.1\r\n")]
-        //Bad: Invalid spacing
-        [DataRow($"GET   /   HTTP/1.1\r\n")]
-        //Bad: Invalid HTTP version
-        [DataRow($"GET / HTTP/2.1\r\n")]
+
+        [DataRow($"/coffee HTTP/1.1\r\n")]   //BAD: Invalid request line parts
+        [DataRow($"GET   /   HTTP/1.1\r\n")] //Bad: Invalid spacing
+        [DataRow($"GET / HTTP/2.1\r\n")]     //Bad: Invalid HTTP version
+        [DataRow($"GET / HTTP/2.1")]         //Bad: Missing separator
         [TestMethod]
-        public void Bad_Unsupported_Format(string request)
+        public void UnsupportedFormat(string request)
         {
-            TestForException(() => { Request.FromStream(GetStream($"{request}{DefaultHeaders}")); });
+            Request r = Request.FromStream(GetStream($"{request}{DefaultHeaders}"));
+            Assert.IsNotNull(r.Error);
         }
 
         [DataRow(1)]
@@ -70,7 +67,7 @@ public sealed class RequestTest
             const string request = $"GET /test HTTP/1.1\r\n" +
                                    $"\r\n";
             Stream stream = new ChunkReader(new MemoryStream(Encoding.UTF8.GetBytes(request)), numBytesPerRead);
-            Request r = Request.FromStream(stream);
+            Request r = Request.FromStream(new Reader(stream));
 
             Assert.AreEqual("GET", r.RequestLine.Method);
             Assert.AreEqual("/test", r.RequestLine.RequestTarget);
@@ -78,12 +75,10 @@ public sealed class RequestTest
         }
     }
 
-
     [TestClass]
     public class Headers
     {
-        // Good: Standard headers
-        [DataRow("Host: localhost:42069\r\n" +
+        [DataRow("Host: localhost:42069\r\n" + // Good: Standard headers
                  "User-Agent: curl/7.81.0\r\n" +
                  "Accept: */*\r\n" +
                  "\r\n")]
@@ -94,13 +89,10 @@ public sealed class RequestTest
             Assert.AreEqual("localhost:42069", r.Headers.Get("Host"));
             Assert.AreEqual("curl/7.81.0", r.Headers.Get("User-Agent"));
             Assert.AreEqual("*/*", r.Headers.Get("Accept"));
-
-            Assert.AreEqual(3, r.Headers.Data().Count);
+            Assert.AreEqual(3, r.Headers.Data.Count);
         }
 
-
-        // Good: Long headers block
-        [DataRow("Host: localhost:42069\r\n" +
+        [DataRow("Host: localhost:42069\r\n" + // Good: Long headers block
                  "User-Agent: curl/7.81.0\r\n" +
                  "Accept: */*\r\n")]
         [TestMethod]
@@ -112,8 +104,7 @@ public sealed class RequestTest
             Assert.AreEqual(16998, r.Headers.Get("Host").Length);
             Assert.AreEqual(12998, r.Headers.Get("User-Agent").Length);
             Assert.AreEqual(4998, r.Headers.Get("Accept").Length);
-
-            Assert.AreEqual(3, r.Headers.Data().Count);
+            Assert.AreEqual(3, r.Headers.Data.Count);
         }
 
         // Good: Single long header
@@ -123,21 +114,19 @@ public sealed class RequestTest
             string longHeader = $"Host: {string.Concat(Enumerable.Repeat("Test, ", 1000))}";
             Request r = Request.FromStream(GetStream($"{DefaultRequestLine}{longHeader}\r\n\r\n"));
 
-            Assert.AreEqual(1, r.Headers.Data().Count);
+            Assert.AreEqual(1, r.Headers.Data.Count);
         }
 
-        // Good: Empty headers
-        [DataRow("\r\n")]
+        [DataRow("\r\n")] // Good: Empty headers
         [TestMethod]
         public void EmptyHeaders(string headers)
         {
             Request r = Request.FromStream(GetStream($"{DefaultRequestLine}{headers}"));
 
-            Assert.AreEqual(0, r.Headers.Data().Count);
+            Assert.AreEqual(0, r.Headers.Data.Count);
         }
 
-        // Good: Duplicate headers
-        [DataRow("Host: localhost:42069\r\n" +
+        [DataRow("Host: localhost:42069\r\n" + // Good: Duplicate headers
                  "Host: www.test.pl\r\n" +
                  "\r\n")]
         [TestMethod]
@@ -145,65 +134,118 @@ public sealed class RequestTest
         {
             Request r = Request.FromStream(GetStream($"{DefaultRequestLine}{headers}"));
             Assert.AreEqual("localhost:42069, www.test.pl", r.Headers.Get("Host"));
-            Assert.AreEqual(1, r.Headers.Data().Count);
+            Assert.AreEqual(1, r.Headers.Data.Count);
         }
 
-
-        // Bad: Malformed header
-        [DataRow("Host : localhost:42069\r\n" +
+        [DataRow("Host : localhost:42069\r\n" + // Bad: Malformed header
                  "Host: www.test.pl\r\n" +
                  "\r\n")]
         [TestMethod]
         public void MalformedHeader(string headers)
         {
-            TestForException((() => { Request.FromStream(GetStream($"{DefaultRequestLine}{headers}")); }));
+            Request r = Request.FromStream(GetStream($"{DefaultRequestLine}{headers}"));
+            Assert.IsNotNull(r.Error);
+        }
+
+        [DataRow("Host : localhost:42069\r\nHost: www.test.pl")] // Bad: Missing headers end separator
+        [TestMethod]
+        public void MissingSeparator(string headers)
+        {
+            Request r = Request.FromStream(GetStream($"{DefaultRequestLine}{headers}"));
+            Assert.IsNotNull(r.Error);
         }
     }
-
 
     [TestClass]
     public class Body
     {
-        // Good: Standard headers
         [DataRow(
-            "GET /coffee HTTP/1.1\r\n" +
+            "GET /coffee HTTP/1.1\r\n" + // Good: Standard headers
             "Host: localhost:42069\r\n" +
             "Content-Length: 13\r\n" +
             "\r\n" +
             "hello world!\n"
         )]
         [TestMethod]
-        public void StandardBody(string request)
+        public void ValidBody(string request)
         {
             Request r = Request.FromStream(GetStream(request));
-
-            Assert.AreEqual("hello world!\n", Encoding.UTF8.GetString(r.Body));
-
+            Assert.AreEqual("hello world!\n", Encoding.UTF8.GetString(r.Body.ToArray()));
             // Assert.AreEqual("localhost:42069", r.Headers.Get("Host"));
             // Assert.AreEqual("curl/7.81.0", r.Headers.Get("User-Agent"));
             // Assert.AreEqual("*/*", r.Headers.Get("Accept"));
 
             // Assert.AreEqual(3, r.Headers.Data().Count);
         }
-    }
 
-    private static Stream GetStream(string data)
-    {
-        return new MemoryStream(Encoding.UTF8.GetBytes(data));
-    }
-
-    private static void TestForException(Action test)
-    {
-        Exception? ex = null;
-        try
+        [DataRow(
+            "GET /coffee HTTP/1.1\r\n" + // Good: Empty body
+            "Host: localhost:42069\r\n" +
+            "Content-Length: 0\r\n" +
+            "\r\n"
+        )]
+        [TestMethod]
+        public void NoBody(string request)
         {
-            test();
-        }
-        catch (IncorrectFormatException e)
-        {
-            ex = e;
+            Request r = Request.FromStream(GetStream(request));
+            Assert.AreEqual(0, r.Body.Count);
         }
 
-        Assert.IsNotNull(ex);
+        [DataRow(
+            "GET /coffee HTTP/1.1\r\n" + // Good: No Content-Length but Body Exists
+            "Host: localhost:42069\r\n" +
+            "\r\n" +
+            "hello world!\n"
+        )]
+        [TestMethod]
+        public void MissingContentLength(string request)
+        {
+            Request r = Request.FromStream(GetStream(request));
+            Assert.AreEqual(0, r.Body.Count);
+        }
+
+        [DataRow(
+            "GET /coffee HTTP/1.1\r\n" + // Bad: Body shorter than reported content length
+            "Host: localhost:42069\r\n" +
+            "Content-Length: 13\r\n" +
+            "\r\n" +
+            "hello\n"
+        )]
+        [TestMethod]
+        public void BodyShorterThanContentLength(string request)
+        {
+            Request r = Request.FromStream(GetStream(request));
+            Assert.IsNotNull(r.Error);
+        }
+
+        [DataRow(
+            "GET /coffee HTTP/1.1\r\n" + //  Bad: Body longer than reported content length
+            "Host: localhost:42069\r\n" +
+            "Content-Length: 5\r\n" +
+            "\r\n" +
+            "hellooooo\n"
+        )]
+        [TestMethod]
+        public void BodyLongerThanContentLength(string request)
+        {
+            Request r = Request.FromStream(GetStream(request));
+            Assert.IsNotNull(r.Error);
+        }
+
+        [DataRow(
+            "GET /coffee HTTP/1.1\r\n" + //  Bad: Missing separator
+            "Host: localhost:42069\r\n" +
+            "Content-Length: 5\r\n" +
+            "hellooooo\n"
+        )]
+        [TestMethod]
+        public void MissingSeparator(string request)
+        {
+            Request r = Request.FromStream(GetStream(request));
+            Assert.IsNotNull(r.Error);
+        }
     }
+
+    private static IReader GetStream(string data) =>
+        new Reader(new MemoryStream(Encoding.UTF8.GetBytes(data)));
 }

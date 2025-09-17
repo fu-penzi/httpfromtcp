@@ -22,29 +22,22 @@ public partial class Headers
     [GeneratedRegex(@"^[A-Za-z0-9!#$%&'*+\-.^_`|~]+$")]
     private static partial Regex HeaderNameRegex();
 
-    public string Get(string key)
-    {
-        return _data[key.ToLower()];
-    }
+    public IReadOnlyDictionary<string, string> Data => _data.AsReadOnly();
+
+    public string Get(string key) => _data[key.ToLower()];
 
     public bool TryGetValue(string key, out string? value)
     {
         return _data.TryGetValue(key.ToLower(), out value);
     }
 
-    public IReadOnlyDictionary<string, string> Data()
-    {
-        return _data.AsReadOnly();
-    }
-
     public override string ToString()
     {
         var builder = new StringBuilder();
-        foreach (KeyValuePair<string, string> kvp in _data)
+        foreach (var kvp in _data)
         {
             builder.Append($"- {kvp.Key}: {kvp.Value}\n");
         }
-
         return builder.ToString();
     }
 
@@ -63,14 +56,12 @@ public partial class Headers
         {
             case -1:
                 return (0, false);
-            // CRLF marks end of Headers lines
-            case 0:
+            case 0: // CRLF marks end of Headers lines
                 return (separator.Length, true);
         }
 
         int read = retIdx + separator.Length;
-        // Trim OWS
-        string header = Encoding.UTF8.GetString(data[..retIdx]).Trim();
+        string header = Encoding.UTF8.GetString(data[..retIdx]).Trim(); // Trim OWS
         string[] parts = header.Split(':', 2);
         if (parts.Length < 2)
         {
@@ -84,14 +75,11 @@ public partial class Headers
             throw new IncorrectFormatException(
                 $"Incorrect header format {header}. Empty header name of value.");
         }
-
-        // Forbidden whitespace before colon
-        if (name.Length != parts[0].Length)
+        if (name.Length != parts[0].Length) // Forbidden whitespace before colon
         {
             throw new IncorrectFormatException(
                 $"Incorrect header format {header}. Unnecessary whitespace before ':'.");
         }
-
         if (!HeaderNameRegex().IsMatch(name))
         {
             throw new IncorrectFormatException(
@@ -102,7 +90,6 @@ public partial class Headers
         {
             _data[name] += $", {value}";
         }
-
         return (read, false);
     }
 }

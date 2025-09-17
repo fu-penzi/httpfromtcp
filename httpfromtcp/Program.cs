@@ -1,5 +1,6 @@
 ﻿using System.Net;
 using System.Net.Sockets;
+using System.Text;
 using httpfromtcp.Parsing;
 
 IPEndPoint ipEndPoint = new(IPAddress.Parse("127.0.0.1"), 42069);
@@ -16,21 +17,20 @@ try
 
     try
     {
-        Request r = Request.FromStream(stream);
+        Request r = Request.FromStream(new Reader(stream));
         Console.WriteLine(
             $"""
-             Request line:
 
+             Request line:
              - Method: {r.RequestLine.Method}
              - Target: {r.RequestLine.RequestTarget}
              - Version: {r.RequestLine.HttpVersion}
              """
         );
-        Console.WriteLine($"Headers:\n{r.Headers}");
-    }
-    catch (IncorrectFormatException e)
-    {
-        Console.WriteLine(e.Message);
+        Console.WriteLine(
+            $"Headers:\n{r.Headers}" +
+            $"Body:\n{Encoding.UTF8.GetString(r.Body.ToArray())}\n" +
+            $"Error:\n{r.Error}");
     }
     catch (IOException e)
     {

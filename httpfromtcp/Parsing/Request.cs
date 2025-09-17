@@ -1,4 +1,5 @@
-﻿using System.Text;
+﻿using System.Net.Sockets;
+using System.Text;
 
 namespace httpfromtcp.Parsing;
 
@@ -7,8 +8,21 @@ internal enum ParsingState
     Initialized,
     ParsingHeaders,
     ParsingBody,
+    Error,
     Done
 }
+
+/// <summary>
+/// RequestLine<br/>
+/// <br/>
+/// <b>request-line CRLF</b><br/><br/>
+/// <i>request-line  = method SP request-target SP HTTP-version</i>
+/// </summary>
+public record RequestLine(
+    string Method = "",
+    string RequestTarget = "",
+    string HttpVersion = ""
+);
 
 /// <summary>
 /// Request parsed in format:
@@ -20,12 +34,13 @@ internal enum ParsingState
 /// </summary>
 public class Request
 {
-    public RequestLine RequestLine;
-    public readonly Headers Headers = new();
-    public byte[] Body = [];
+    public RequestLine RequestLine { get; private set; } = new();
+    public Headers Headers { get; } = new();
+    public List<byte> Body { get; } = [];
+    public Exception? Error { get; private set; }
 
     private ParsingState _state = ParsingState.Initialized;
-    private bool Done => _state == ParsingState.Done;
+    private bool Done => _state is ParsingState.Done or ParsingState.Error;
 
     /// <summary>
     /// Loop over stream of data until whole request is parsed.
@@ -33,29 +48,45 @@ public class Request
     /// <param name="stream">Stream to read from.</param>
     /// <param name="length">Max length of parsing buffer.</param>
     /// <returns>Parsed request</returns>
-    public static Request FromStream(Stream stream, int length = 1024)
+    public static Request FromStream(IReader stream, int length = 1024)
     {
         Request request = new();
-        int buffLen = 0;
-        byte[] buff = new byte[length];
-        while (!request.Done)
+        try
         {
-            if (buffLen == buff.Length)
+            int buffLen = 0;
+            byte[] buff = new byte[length];
+            while (!request.Done)
             {
-                byte[] newBuff = new byte[buff.Length * 2];
-                Array.Copy(buff, newBuff, buff.Length);
-                buff = newBuff;
-            }
+                if (buffLen == buff.Length)
+                {
+                    byte[] newBuff = new byte[buff.Length * 2];
+                    Array.Copy(buff, newBuff, buff.Length);
+                    buff = newBuff;
+                }
 
-            buffLen += stream.Read(buff, buffLen, buff.Length - buffLen);
+                int readBytes = stream.DataAvailable
+                    ? stream.Read(buff, buffLen, buff.Length - buffLen)
+                    : 0;
 
-            int parsedBytes = request.Parse(buff.AsSpan()[..buffLen]);
-            if (parsedBytes != 0)
-            {
-                buffLen -= parsedBytes;
-                // Remove parsed elements from buffer
-                Array.Copy(buff, parsedBytes, buff, 0, buffLen);
+                buffLen += readBytes;
+
+                int parsedBytes = request.Parse(buff.AsSpan()[..buffLen]);
+                if (parsedBytes > 0)
+                {
+                    buffLen -= parsedBytes;
+                    Array.Copy(buff, parsedBytes, buff, 0, buffLen); // Remove parsed elements from buffer
+                }
+                else if (!request.Done && readBytes == 0) // terminate if not reading and parsing anything
+                {
+                    throw new ArgumentException($"Unexpected end of stream for: {request.RequestLine}");
+                }
             }
+        }
+        catch (Exception e)
+        {
+            request._state = ParsingState.Error;
+            request.Error = e;
+            return request;
         }
 
         return request;
@@ -68,8 +99,6 @@ public class Request
     /// <returns>Number of parsed bytes. 0 if not enough data to parse.</returns>
     private int Parse(Span<byte> data)
     {
-        int contentLength = 0;
-
         switch (_state)
         {
             case ParsingState.Initialized:
@@ -79,7 +108,6 @@ public class Request
                 {
                     _state = ParsingState.ParsingHeaders;
                 }
-
                 return parsed;
             }
             case ParsingState.ParsingHeaders:
@@ -89,35 +117,47 @@ public class Request
                 {
                     return parsed;
                 }
-
-                bool hasBody = Headers.TryGetValue("Content-Length", out _);
-                _state = hasBody
+                if (!Headers.TryGetValue("Content-Length", out var contentLengthValue))
+                {
+                    _state = ParsingState.Done;
+                    return parsed;
+                }
+                if (!int.TryParse(contentLengthValue, out var contentLength))
+                {
+                    throw new IncorrectFormatException($"Invalid Content-Length value: {contentLengthValue}");
+                }
+                _state = contentLength > 0
                     ? ParsingState.ParsingBody
                     : ParsingState.Done;
-
                 return parsed;
             }
             case ParsingState.ParsingBody:
             {
-                if (!Headers.TryGetValue("Content-Length", out var contentLengthValue))
+                int contentLength = int.Parse(Headers.Get("Content-Length"));
+                if (Body.Count < contentLength && data.Length == 0)
                 {
-                    throw new IncorrectFormatException("Missing Content-Length");
+                    throw new IncorrectFormatException(
+                        $"Content-Length mismatch. Body shorter than Content-Length.");
                 }
 
-                if (!int.TryParse(contentLengthValue, out contentLength))
+                int parsed = ParseBody(data);
+                if (Body.Count < contentLength)
                 {
-                    throw new IncorrectFormatException($"Invalid Content-Length value: {contentLengthValue}");
+                    return parsed;
                 }
-
-                if (Body.Length != contentLength)
+                if (Body.Count == contentLength)
                 {
-                    return ParseBody(data);
+                    _state = ParsingState.Done;
+                    return parsed;
                 }
-
-                _state = ParsingState.Done;
-                return 0;
+                if (Body.Count > contentLength)
+                {
+                    throw new IncorrectFormatException(
+                        $"Content-Length mismatch. Body longer than Content-Length.");
+                }
+                break;
             }
-            case ParsingState.Done:
+            default:
             {
                 return 0;
             }
@@ -140,12 +180,11 @@ public class Request
         {
             return 0;
         }
-
         int read = retIdx + separator.Length;
+
         string str = Encoding.UTF8.GetString(data);
         string requestLine = str[..retIdx];
-        // Split by SP
-        string[] requestLineParts = requestLine.Split(" ");
+        string[] requestLineParts = requestLine.Split(" "); // Split by SP
         if (requestLineParts.Length < 3)
         {
             throw new IncorrectFormatException($"Incorrect request-line format {requestLine}");
@@ -160,14 +199,18 @@ public class Request
                 : throw new IncorrectFormatException($"Unsupported HTTP version {version}"),
             _ => throw new IncorrectFormatException($"Incorrect request-line format {requestLine}"),
         };
-        RequestLine = new RequestLine(method, requestTarget, httpVersion);
-
+        RequestLine = new RequestLine
+        {
+            Method = method,
+            RequestTarget = requestTarget,
+            HttpVersion = httpVersion
+        };
         return read;
     }
 
     private int ParseBody(Span<byte> data)
     {
-        Body = data.ToArray();
+        Body.AddRange(data);
         return data.Length;
     }
 }
