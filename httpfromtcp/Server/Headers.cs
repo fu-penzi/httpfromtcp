@@ -24,6 +24,34 @@ public partial class Headers
 
     public IReadOnlyDictionary<string, string> Data => _data.AsReadOnly();
 
+    public Headers()
+    {
+    }
+
+    public Headers(Dictionary<string, string> headers)
+    {
+        foreach (var kvp in headers)
+        {
+            Add(kvp.Key, kvp.Value);
+        }
+    }
+
+    public void Add(string key, string value)
+    {
+        if (!_data.TryAdd(key.ToLower(), value))
+        {
+            _data[key.ToLower()] = value;
+        }
+    }
+
+    public void Add(Dictionary<string, string> headers)
+    {
+        foreach (var kvp in headers)
+        {
+            Add(kvp.Key, kvp.Value);
+        }
+    }
+
     public string Get(string key) => _data[key.ToLower()];
 
     public bool TryGetValue(string key, out string? value)
@@ -36,7 +64,7 @@ public partial class Headers
         var builder = new StringBuilder();
         foreach (var kvp in _data)
         {
-            builder.Append($"- {kvp.Key}: {kvp.Value}\n");
+            builder.Append($"{kvp.Key}: {kvp.Value}\r\n");
         }
         return builder.ToString();
     }
@@ -48,7 +76,7 @@ public partial class Headers
     /// <returns><b>read</b> - Number of bytes parsed. 0 if needs more data.<br/>
     /// <b>done</b> - True if all headers parsed.</returns>
     /// <exception cref="IncorrectFormatException"></exception>
-    public (int read, bool done) Parse(Span<byte> data)
+    internal (int read, bool done) Parse(Span<byte> data)
     {
         byte[] separator = Encoding.UTF8.GetBytes(Constants.Separator);
         int retIdx = data.IndexOf(separator);

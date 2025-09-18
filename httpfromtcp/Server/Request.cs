@@ -12,7 +12,13 @@ public record RequestLine(
     string Method        = "",
     string RequestTarget = "",
     string HttpVersion   = ""
-);
+)
+{
+    public override string ToString()
+    {
+        return $"{Method} {RequestTarget} HTTP/{HttpVersion}\r\n";
+    }
+};
 
 /// <summary>
 /// Request parsed in format:
@@ -47,7 +53,7 @@ public class Request
     /// </summary>
     /// <param name="stream">Stream to read from.</param>
     /// <param name="initialBuff">Initial length of parsing buffer.</param>
-    /// <returns>Parsed request</returns>
+    /// <returns>Parsed request</returns>`
     public static Request FromStream(Stream stream, int initialBuff = 1024)
     {
         Reader reader = new(stream);
@@ -66,7 +72,7 @@ public class Request
                 }
 
                 int readBytes = reader.DataAvailable
-                    ? stream.Read(buff, buffLen, buff.Length - buffLen)
+                    ? reader.Read(buff, buffLen, buff.Length - buffLen)
                     : 0;
 
                 buffLen += readBytes;
@@ -77,11 +83,6 @@ public class Request
                     buffLen -= parsedBytes;
                     Array.Copy(buff, parsedBytes, buff, 0, buffLen); // Remove parsed elements from buffer
                 }
-                // TODO handle this
-                // else if (!request.Done && readBytes == 0) // terminate if not reading and parsing anything
-                // {
-                //     throw new ArgumentException($"Unexpected end of stream for: {request.RequestLine}");
-                // }
             }
         }
         catch (Exception e)

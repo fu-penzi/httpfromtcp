@@ -1,19 +1,16 @@
 ﻿using System.Net;
 using System.Net.Sockets;
-using System.Text;
 
 namespace httpfromtcp.Server;
 
-public class Server
-{
-    private IPEndPoint  IpEndPoint { get; }
-    private TcpListener Listener   { get; }
+public delegate Response RequestHandler(Request request);
 
-    public Server(int port)
-    {
-        IpEndPoint = new IPEndPoint(IPAddress.Parse("127.0.0.1"), port);
-        Listener = new TcpListener(IpEndPoint);
-    }
+public class Server(int port)
+{
+    private static IPAddress LocalhostAddress { get; } = IPAddress.Parse("127.0.0.1");
+
+    private TcpListener    Listener { get; } = new(new IPEndPoint(LocalhostAddress, port));
+    private RequestHandler _handler;
 
     public void Serve()
     {
@@ -27,7 +24,7 @@ public class Server
             Console.WriteLine(e);
             throw;
         }
-        Console.WriteLine($"Listening on: {IpEndPoint}");
+        Console.WriteLine($"Listening on: {Listener.LocalEndpoint}");
 
         _ = Listen();
     }
@@ -35,6 +32,11 @@ public class Server
     public void Close()
     {
         Listener.Stop();
+    }
+
+    public void Handle(RequestHandler handler)
+    {
+        _handler = handler;
     }
 
     private async Task Listen()
@@ -52,19 +54,12 @@ public class Server
         try
         {
             Request request = Request.FromStream(stream);
-            Console.WriteLine(
-                $"""
+            Response response = _handler(request);
+            response.AddDefaultHeaders(response.Body.Length);
 
-                 Request line:
-                 - Method: {request.RequestLine.Method}
-                 - Target: {request.RequestLine.RequestTarget}
-                 - Version: {request.RequestLine.HttpVersion}
-                 """
-            );
-            Console.WriteLine(
-                $"Headers:\n{request.Headers}" +
-                $"Body:\n{Encoding.UTF8.GetString(request.Body.ToArray())}\n" +
-                $"Error:\n{request.Error}");
+            response.WriteStatusLine(stream);
+            response.WriteHeaders(stream);
+            response.WriteBody(stream);
         }
         catch (IOException e)
         {
