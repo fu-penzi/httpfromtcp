@@ -44,14 +44,6 @@ public partial class Headers
         }
     }
 
-    public void Add(Dictionary<string, string> headers)
-    {
-        foreach (var kvp in headers)
-        {
-            Add(kvp.Key, kvp.Value);
-        }
-    }
-
     public string Get(string key) => _data[key.ToLower()];
 
     public bool TryGetValue(string key, out string? value)

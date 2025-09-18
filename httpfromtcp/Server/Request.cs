@@ -54,7 +54,7 @@ public class Request
     /// <param name="stream">Stream to read from.</param>
     /// <param name="initialBuff">Initial length of parsing buffer.</param>
     /// <returns>Parsed request</returns>`
-    public static Request FromStream(Stream stream, int initialBuff = 1024)
+    public static Request FromStream(Stream stream, int initialBuff = 2048)
     {
         Reader reader = new(stream);
         Request request = new();

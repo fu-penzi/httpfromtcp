@@ -1,17 +1,18 @@
 ﻿using httpfromtcp.Server;
 
-Server server = new(port: 42069);
+Server server = new(port: 42000);
 
 server.Serve();
 
-server.Handle((request) =>
+server.Handle(Http.Method.Get, "/", (request) =>
 {
     if (request.Error is not null)
     {
-        return new Response()
+        Console.WriteLine(request.Error);
+        return Task.FromResult(new Response()
         {
-            StatusCode = StatusCode._400,
-            Headers = new Headers(new()
+            StatusCode = Http.StatusCode._400,
+            Headers = new Headers(new Dictionary<string, string>()
                 {
                     { "Content-Type", "text/html" }
                 }
@@ -26,25 +27,13 @@ server.Handle((request) =>
                      </body>
                    </html>
                    """u8.ToArray()
-        };
+        });
     }
 
-    // Console.WriteLine(
-    //     $"""
-    //
-    //      Request line:
-    //      {request.RequestLine}
-    //      """
-    // );
-    // Console.WriteLine(
-    //     $"Headers:\n{request.Headers}\n" +
-    //     $"Body:\n{Encoding.UTF8.GetString(request.Body.ToArray())}\n" +
-    //     $"Error:\n{request.Error}");
-
-    return new Response()
+    return Task.FromResult(new Response()
     {
-        StatusCode = StatusCode._200,
-        Headers = new Headers(new()
+        StatusCode = Http.StatusCode._200,
+        Headers = new Headers(new Dictionary<string, string>()
             {
                 { "Content-Type", "text/html" }
             }
@@ -59,7 +48,7 @@ server.Handle((request) =>
                  </body>
                </html>
                """u8.ToArray()
-    };
+    });
 });
 
 while (true) ;
