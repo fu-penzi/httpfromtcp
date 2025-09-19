@@ -51,4 +51,48 @@ server.Handle(Http.Method.Get, "/", (request) =>
     });
 });
 
+
+server.Handle(Http.Method.Get, "/json", (_) => Task.FromResult(new Response()
+{
+    StatusCode = Http.StatusCode._200,
+    Headers = new Headers(new Dictionary<string, string>()
+        {
+            { "Content-Type", "application/json" }
+        }
+    ),
+    Body = """{"test": "value"}"""u8.ToArray()
+}));
+
+server.Handle(Http.Method.Get, "/video", (_) =>
+{
+    byte[] file = File.ReadAllBytes("./assets/test.mp4");
+
+    return Task.FromResult(new Response()
+    {
+        StatusCode = Http.StatusCode._200,
+        Headers = new Headers(new Dictionary<string, string>()
+            {
+                { "Content-Type", "video/mp4" }
+            }
+        ),
+        Body = file
+    });
+});
+
+server.Handle(Http.Method.Get, "/png", (_) =>
+{
+    byte[] file = File.ReadAllBytes("./assets/test.png");
+
+    return Task.FromResult(new Response()
+    {
+        StatusCode = Http.StatusCode._200,
+        Headers = new Headers(new Dictionary<string, string>()
+            {
+                { "Content-Type", "image/png" }
+            }
+        ),
+        Body = file
+    });
+});
+
 while (true) ;
